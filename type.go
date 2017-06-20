@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"regexp"
 	"strings"
@@ -12,10 +13,12 @@ type Src int
 type Fmt int
 
 const (
-	HDTV Src = iota
+	HDTV Src = iota + 1
 	CAM
 	DVD
-	X264 Fmt = iota
+)
+const (
+	X264 Fmt = iota + 1
 	XVID
 )
 
@@ -40,7 +43,7 @@ type Torrent struct {
 	Name    string
 	Comment string
 	Creator string
-	size    int
+	size    int64
 }
 
 type TorrentVideo struct {
@@ -58,9 +61,10 @@ type TorrentVideo struct {
 }
 
 func NewTorrent(mt MetaTorrent) (T *Torrent) {
+	T = new(Torrent)
 	if mt.Info.Length == 0 {
 		for i, path := range mt.Info.Files {
-			for _, file := range path {
+			for _, file := range path.Path {
 				if file[len(file)-3:] == "mkv" || file[len(file)-3:] == "mp4" {
 					T.size = mt.Info.Files[i].Length
 					T.Name = file
@@ -73,6 +77,7 @@ func NewTorrent(mt MetaTorrent) (T *Torrent) {
 	}
 	T.Comment = mt.Comment
 	T.Creator = mt.CreatedBy
+	return T
 }
 
 func (Mt *MetaTorrent) Load(r io.Reader) error {
@@ -83,31 +88,32 @@ func (T *TorrentVideo) Process() error {
 	var (
 		err       error
 		r         rune
-		exit, tag = bool
+		exit, tag bool
 		str       string
-		i         int
-		re        = [...]regexp.Regexp{regexp.MustCompile(`[Ss](\d{2})[Ee](\d{2})`), regexp.MustCompile(`([A-Za-z]{3-10})\[([A-Z]{4-6})\]`)}
+		re        = [2]*regexp.Regexp{regexp.MustCompile(`[Ss](\d{2})[Ee](\d{2})`), regexp.MustCompile(`([A-Za-z]{3,10})\[([A-Za-z]{4,6})\]`)}
 	)
 	reader := strings.NewReader(T.Name)
 	for err == nil && !exit {
 		for err == nil && r != '.' && r != '-' {
 			r, _, err = reader.ReadRune()
-			if err != nil {
+			if err == io.EOF {
+				exit = true
+				break
+			} else if err != nil {
 				return err
 			}
 			if r != '.' && r != '-' {
 				str += string(r)
 			}
 		}
+		fmt.Println(str)
 		if tag {
 			switch str {
 			case "NUKED":
 				T.Nuked = true
-			case "INTERNAL":
-				T.Internal = true
 			case "REPACK":
 				T.Repack = true
-			case "x264", "H", "264":
+			case "x264", "H", "264", "h264", "H264":
 				T.Format = X264
 			case "XviD", "DivX":
 				T.Format = XVID
@@ -124,17 +130,24 @@ func (T *TorrentVideo) Process() error {
 			case "DVD":
 				T.Source = DVD
 			}
-			switch {
-			case re[0].Match(str):
-				tag = true
-				match := re[1].FindStringSubmatch(str)
-				T.Season = match[1]
-				T.Episode = match[2]
-			case re[1].Match(str):
-				match := re[1].FindStringSubmatch(str)
-				T.Release = match[1]
-				T.Creator = match[2]
-			}
+		}
+		switch {
+		case re[0].MatchString(str):
+			tag = true
+			match := re[0].FindStringSubmatch(str)
+			T.Season = match[1]
+			T.Episode = match[2]
+		case re[1].MatchString(str):
+			match := re[1].FindStringSubmatch(str)
+			T.Release = match[1]
+			T.Creator = match[2]
+		}
+		fmt.Println(re[1])
+		fmt.Printf("tag: %t\n", re[1].MatchString(str))
+
+		if r == '.' || r == '-' {
+			r = ' '
+			str = ""
 		}
 	}
 	return nil
