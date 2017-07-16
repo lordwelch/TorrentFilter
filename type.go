@@ -48,8 +48,7 @@ type Torrent struct {
 
 type TorrentVideo struct {
 	*Torrent
-	Episode  string
-	Season   string
+	Title    string
 	Release  string
 	Source   Src
 	Format   Fmt
@@ -58,6 +57,12 @@ type TorrentVideo struct {
 	Repack   bool
 	Nuked    bool
 	P720     bool
+}
+
+type TorrentEpisode struct {
+	*TorrentVideo
+	Episode string
+	Season  string
 }
 
 func NewTorrent(mt MetaTorrent) (T *Torrent) {
@@ -130,17 +135,21 @@ func (T *TorrentVideo) Process() error {
 			case "DVD":
 				T.Source = DVD
 			}
-		}
-		switch {
-		case re[0].MatchString(str):
-			tag = true
-			match := re[0].FindStringSubmatch(str)
-			T.Season = match[1]
-			T.Episode = match[2]
-		case re[1].MatchString(str):
-			match := re[1].FindStringSubmatch(str)
-			T.Release = match[1]
-			T.Creator = match[2]
+			if re[1].MatchString(str) {
+				match := re[1].FindStringSubmatch(str)
+				T.Release = match[1]
+				T.Creator = match[2]
+			}
+
+		} else {
+			if re[0].MatchString(str) {
+				tag = true
+				match := re[0].FindStringSubmatch(str)
+				T.Season = match[1]
+				T.Episode = match[2]
+			} else {
+				T.Title += str
+			}
 		}
 		fmt.Println(re[1])
 		fmt.Printf("tag: %t\n", re[1].MatchString(str))
