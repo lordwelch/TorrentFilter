@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"os"
+	"os/exec"
+	"path"
 
 	"github.com/alexflint/go-arg"
 )
@@ -21,9 +24,17 @@ func main() {
 		RELEASE  string   `arg:"-r,help:Release group preference order. Comma seperated."`
 		SHOW     []string `arg:"positional,help:TV show to download"`
 		NEW      bool     `arg:"-n,help:Only modify new torrents"`
+		PATH     string   `arg:"-P,help:Path to torrent files"`
 	}
 	arg.MustParse(&args)
-	fmt.Println("Hello, World!!!")
+	scnr := bufio.NewScanner(os.Stdin)
+	for err == nil {
+		if !scnr.scan() {
+			panic("fail")
+		}
+		exec.Command("wget", scnr.Text(), "-o", args.PATH+'/')
+		process(args.PATH + '/' + path.Base(scnr.Text()))
+	}
 }
 
 func process(torrentFile string) *TorrentVideo {

@@ -65,6 +65,13 @@ type TorrentEpisode struct {
 	Season  string
 }
 
+type Interface interface {
+	ReleaseGroup() string
+	Len() int
+	Swap(i, j int)
+	Less(i, j int) bool
+}
+
 func NewTorrent(mt MetaTorrent) (T *Torrent) {
 	T = new(Torrent)
 	if mt.Info.Length == 0 {
@@ -140,7 +147,6 @@ func (T *TorrentVideo) Process() error {
 				T.Release = match[1]
 				T.Creator = match[2]
 			}
-
 		} else {
 			if re[0].MatchString(str) {
 				tag = true
