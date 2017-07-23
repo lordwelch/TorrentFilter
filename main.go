@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	current_torrents [][]TorrentVideo
+	current_torrents SeriesTorrent
 )
 
 func main() {
@@ -27,20 +27,20 @@ func main() {
 		PATH     string   `arg:"-P,help:Path to torrent files"`
 	}
 	arg.MustParse(&args)
-	scnr := bufio.NewScanner(os.Stdin)
+	scanner := bufio.NewScanner(os.Stdin)
 	for err == nil {
-		if !scnr.scan() {
+		if !scanner.scan() {
 			panic("fail")
 		}
-		exec.Command("wget", scnr.Text(), "-o", args.PATH+'/')
-		process(args.PATH + '/' + path.Base(scnr.Text()))
+		exec.Command("wget", scanner.Text(), "-o", args.PATH+'/')
+		process(args.PATH + '/' + path.Base(scanner.Text()))
 	}
 }
 
-func process(torrentFile string) *TorrentVideo {
+func process(torrentFile string) *VideoTorrent {
 	var (
 		mt *MetaTorrent  = new(MetaTorrent)
-		vt *TorrentVideo = new(TorrentVideo)
+		vt *VideoTorrent = new(VideoTorrent)
 	)
 	f, _ := os.OpenFile(torrentFile, os.O_RDONLY, 755)
 	mt.Load(f)

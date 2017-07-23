@@ -11,18 +11,28 @@ import (
 
 type Src int
 type Fmt int
+type Res int
 
 const (
 	HDTV Src = iota + 1
-	CAM
-	DVD
+	AHDTV
+	HRPDTV
 )
+
 const (
 	X264 Fmt = iota + 1
 	XVID
 )
 
+const (
+	P480 Res = iota + 1
+	P720
+	P2080
+	I1080
+)
+
 type MetaTorrent struct {
+	Path         string
 	Announce     string     `bencode:"announce"`
 	Announcelist [][]string `bencode:"announce-list"`
 	Comment      string     `bencode:"comment"`
@@ -40,36 +50,35 @@ type MetaTorrent struct {
 }
 
 type Torrent struct {
+	Meta    MetaTorrent
 	Name    string
 	Comment string
 	Creator string
 	size    int64
 }
 
-type TorrentVideo struct {
-	*Torrent
-	Title    string
-	Release  string
-	Source   Src
-	Format   Fmt
-	Proper   bool
-	Internal bool
-	Repack   bool
-	Nuked    bool
-	P720     bool
+type MediaTorrent struct {
+	Torrent
+	Title  string
+	Format Fmt
+	Source Src
+	Date   string
+	Tags   map[string]bool //ALTERNATIVE.CUT, CONVERT, COLORIZED, DC, DIRFIX, DUBBED, EXTENDED, FINAL, INTERNAL, NFOFIX, OAR, OM, PPV, PROPER, REAL, REMASTERED, READNFO, REPACK, RERIP, SAMPLEFIX, SOURCE.SAMPLE, SUBBED, UNCENSORED, UNRATED, UNCUT, WEST.FEED, and WS
 }
 
-type TorrentEpisode struct {
-	*TorrentVideo
+type EpisodeTorrent struct {
+	VT      []MediaTorrent
 	Episode string
 	Season  string
 }
 
+type SeriesTorrent struct {
+	Episodes []EpisodeTorrent
+	title    string
+}
+
 type Interface interface {
-	ReleaseGroup() string
-	Len() int
-	Swap(i, j int)
-	Less(i, j int) bool
+	Title() string
 }
 
 func NewTorrent(mt MetaTorrent) (T *Torrent) {
@@ -89,6 +98,7 @@ func NewTorrent(mt MetaTorrent) (T *Torrent) {
 	}
 	T.Comment = mt.Comment
 	T.Creator = mt.CreatedBy
+	T.Meta = mt
 	return T
 }
 
@@ -96,74 +106,90 @@ func (Mt *MetaTorrent) Load(r io.Reader) error {
 	return bencode.NewDecoder(r).Decode(Mt)
 }
 
-func (T *TorrentVideo) Process() error {
+func (T *MediaTorrent) Process() error {
 	var (
-		err       error
-		r         rune
-		exit, tag bool
-		str       string
-		re        = [2]*regexp.Regexp{regexp.MustCompile(`[Ss](\d{2})[Ee](\d{2})`), regexp.MustCompile(`([A-Za-z]{3,10})\[([A-Za-z]{4,6})\]`)}
+		err                    error
+		r                      rune
+		exit, tag, year, month bool
+		dateIndex
+		indexes                []integer
+		//str                    string
+		re = [4]*regexp.Regexp{regexp.MustCompile(`^[s](\d{2})[s](\d{2})$`), regexp.MustCompile(`^\d{4}$`), regexp.MustCompile(`^\d\d$`), regexp.MustCompile(`^([A-Za-z]{3,10})\[([A-Za-z]{4,6})\]$`)}
 	)
-	reader := strings.NewReader(T.Name)
-	for err == nil && !exit {
-		for err == nil && r != '.' && r != '-' {
-			r, _, err = reader.ReadRune()
-			if err == io.EOF {
-				exit = true
-				break
-			} else if err != nil {
-				return err
-			}
-			if r != '.' && r != '-' {
-				str += string(r)
-			}
-		}
-		fmt.Println(str)
-		if tag {
-			switch str {
-			case "NUKED":
-				T.Nuked = true
-			case "REPACK":
-				T.Repack = true
-			case "x264", "H", "264", "h264", "H264":
-				T.Format = X264
-			case "XviD", "DivX":
-				T.Format = XVID
-			case "720p":
-				T.P720 = true
-			case "PROPER", "READ", "NFO":
-				T.Proper = true
-			case "INTERNAL":
-				T.Internal = true
-			case "HDTV", "DVDRip":
-				T.Source = HDTV
-			case "CAM":
-				T.Source = CAM
-			case "DVD":
-				T.Source = DVD
-			}
-			if re[1].MatchString(str) {
-				match := re[1].FindStringSubmatch(str)
-				T.Release = match[1]
-				T.Creator = match[2]
-			}
-		} else {
-			if re[0].MatchString(str) {
-				tag = true
-				match := re[0].FindStringSubmatch(str)
-				T.Season = match[1]
-				T.Episode = match[2]
-			} else {
-				T.Title += str
-			}
-		}
-		fmt.Println(re[1])
-		fmt.Printf("tag: %t\n", re[1].MatchString(str))
-
-		if r == '.' || r == '-' {
-			r = ' '
-			str = ""
+	strs := strings.Split(T.Name)
+	for i, str := range strs {
+		if re[1].MatchString(strings.ToLower(str)) {
+			indexes = append(indexes, i)
 		}
 	}
+	if len(indexes) > 0 {
+		T.Date = indexes[len(indexes)-1]
+	}
+	for i, str := range strs {
+		fmt.Println(str)
+		if tag {
+			T.tag(str)
+			if i == len(strs)-1 && strings.Contains(str, "-") {
+				tags := strings.Split(str, "-")
+				T.tag(tags[0])
+				eztv := strings.Split(tags, "[")
+				T.Release = eztv[0]
+				T.Creator = eztv[1][:len(eztv[1])-1]
+			}
+		} else {
+			switch {
+			case year:
+				year = false
+				if re[2].MatchString(strings.ToLower(str)) {
+					month = true
+					T.Date += "." + str
+					continue
+				}
+				if re[1].MatchString(strings.ToLower(str)) {
+					T.Title += T.Date
+					T.Date = str
+					tag = true
+					continue
+				}
+				T.tag(str)
+				T.Title += " " + str
+			case month:
+				T.Date += "." + str
+				tag = true
+			case re[0].MatchString(strings.ToLower(str)):
+				tag = true
+				match := re[0].FindStringSubmatch(strings.ToLower(str))
+				T.Season = match[1]
+				T.Episode = match[2]
+			case re[1].MatchString(strings.ToLower(str)):
+				year = true
+				T.Date = str
+				continue
+			default:
+				T.Title += " " + str
+			}
+		}
+	}
+
+	T.Title = strings.TrimSpace(T.Title)
 	return nil
+}
+
+func (T *MediaTorrent) tag(str string) {
+	switch strings.ToLower(str) {
+	case "x264", "h", "264", "h264", "h264":
+		T.Format = X264
+	case "xvid", "divx":
+		T.Format = XVID
+	case "720p":
+		T.P720 = true
+	case "hdtv":
+		T.Source = HDTV
+	case "ahdtv":
+		T.Source = AHDTV
+	case "hrpdtv":
+		T.Source = HRPDTV
+	default:
+		T.Tags[strings.ToLower(str)] = true
+	}
 }
