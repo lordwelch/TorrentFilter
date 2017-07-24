@@ -15,32 +15,31 @@ var (
 )
 
 func main() {
-	var args struct {
-		P720     bool     `arg:"-7,help:Do not select 720p file if another exists."`
-		NUKED    bool     `arg:"-N,help:Allow NUKED files."`
-		DIVX     bool     `arg:"help:Prefer DivX encoding if available. Default x264"`
-		PROPER   bool     `arg:"help:Do not prefer PROPER FILES."`
-		INTERNAL bool     `arg:"help:Prefer INTERNAL files."`
-		RELEASE  string   `arg:"-r,help:Release group preference order. Comma seperated."`
-		SHOW     []string `arg:"positional,help:TV show to download"`
-		NEW      bool     `arg:"-n,help:Only modify new torrents"`
-		PATH     string   `arg:"-P,help:Path to torrent files"`
-	}
+	var (
+		err  error
+		args struct {
+			RES     string   `arg:"help:Resolution preference [480/720/1080]"`
+			RELEASE []string `arg:"-r,help:Release group preference order."`
+			Series  []string `arg:"required,positional,help:TV series to download"`
+			NEW     bool     `arg:"-n,help:Only modify new torrents"`
+			PATH    string   `arg:"-P,help:Path to torrent files"`
+		}
+	)
 	arg.MustParse(&args)
 	scanner := bufio.NewScanner(os.Stdin)
 	for err == nil {
-		if !scanner.scan() {
+		if !scanner.Scan() {
 			panic("fail")
 		}
-		exec.Command("wget", scanner.Text(), "-o", args.PATH+'/')
-		process(args.PATH + '/' + path.Base(scanner.Text()))
+		exec.Command("wget", scanner.Text(), "-o", args.PATH+"/")
+		process(args.PATH + "/" + path.Base(scanner.Text()))
 	}
 }
 
-func process(torrentFile string) *VideoTorrent {
+func process(torrentFile string) *MediaTorrent {
 	var (
 		mt *MetaTorrent  = new(MetaTorrent)
-		vt *VideoTorrent = new(VideoTorrent)
+		vt *MediaTorrent = new(MediaTorrent)
 	)
 	f, _ := os.OpenFile(torrentFile, os.O_RDONLY, 755)
 	mt.Load(f)
