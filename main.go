@@ -5,19 +5,22 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path"
+	"path/filepath"
+	"strings"
 
 	"github.com/alexflint/go-arg"
 )
 
 var (
 	current_torrents SeriesTorrent
+	unselectedDir    string
 )
 
 func main() {
 	var (
-		err  error
-		args struct {
+		torrentName string
+		torrentPath string
+		args        struct {
 			RES     string   `arg:"help:Resolution preference [480/720/1080]"`
 			RELEASE []string `arg:"-r,help:Release group preference order."`
 			Series  []string `arg:"required,positional,help:TV series to download"`
@@ -26,13 +29,18 @@ func main() {
 		}
 	)
 	arg.MustParse(&args)
+	unselectedDir = filepath.Clean(args.PATH + "/unselected/")
 	scanner := bufio.NewScanner(os.Stdin)
-	for err == nil {
-		if !scanner.Scan() {
-			panic("fail")
+	for scanner.Scan() {
+		url := strings.TrimSpace(scanner.Text())
+		torrentName = filepath.Base(url)
+		torrentPath = filepath.Join(unselectedDir, torrentName)
+		cmd := exec.Command("wget", url, "-o", torrentPath)
+		if cmd.Run() != nil {
+			fmt.Println("url failed: ", url)
+			continue
 		}
-		exec.Command("wget", scanner.Text(), "-o", args.PATH+"/")
-		process(args.PATH + "/" + path.Base(scanner.Text()))
+		process(torrentPath)
 	}
 }
 
