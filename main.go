@@ -53,7 +53,7 @@ func process(torrentFile string) *MediaTorrent {
 	mt.Load(f)
 	fmt.Printf("%+v\n", mt)
 	vt.Torrent = NewTorrent(*mt)
-	vt.Process()
+	vt.Parse(vt.Name)
 	fmt.Printf("%+v\n", *vt)
 	return vt
 }
