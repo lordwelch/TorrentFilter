@@ -66,7 +66,7 @@ func NewTorrent(mt MetaTorrent) (T Torrent) {
 	return T
 }
 
-func (Mt *MetaTorrent) Load(r io.Reader) error {
+func (Mt *MetaTorrent) ReadFile(r io.Reader) error {
 	return bencode.NewDecoder(r).Decode(Mt)
 }
 

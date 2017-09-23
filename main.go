@@ -28,8 +28,13 @@ func main() {
 			PATH    string   `arg:"-P,help:Path to torrent files"`
 		}
 	)
+
 	arg.MustParse(&args)
+	if len(args.PATH < 1) {
+		args.PATH, _ = os.Getwd()
+	}
 	unselectedDir = filepath.Clean(args.PATH + "/unselected/")
+
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
 		url := strings.TrimSpace(scanner.Text())
@@ -50,7 +55,7 @@ func process(torrentFile string) *MediaTorrent {
 		vt *MediaTorrent = new(MediaTorrent)
 	)
 	f, _ := os.OpenFile(torrentFile, os.O_RDONLY, 755)
-	mt.Load(f)
+	mt.ReadFile(f)
 	fmt.Printf("%+v\n", mt)
 	vt.Torrent = NewTorrent(*mt)
 	vt.Parse(vt.Name)
