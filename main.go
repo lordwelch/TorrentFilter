@@ -49,10 +49,10 @@ func main() {
 	}
 }
 
-func process(torrentFile string) *MediaTorrent {
+func process(torrentFile string) *SceneVideoTorrent {
 	var (
-		mt *MetaTorrent  = new(MetaTorrent)
-		vt *MediaTorrent = new(MediaTorrent)
+		mt *MetaTorrent       = new(MetaTorrent)
+		vt *SceneVideoTorrent = new(SceneVideoTorrent)
 	)
 	f, _ := os.OpenFile(torrentFile, os.O_RDONLY, 755)
 	mt.ReadFile(f)

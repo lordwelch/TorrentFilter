@@ -33,18 +33,14 @@ type Torrent struct {
 	Size    int64
 }
 
-type MediaTorrent struct {
+type SceneVideoTorrent struct {
 	Torrent
 	Scene.Scene
 }
 
-type EpisodeTorrent []MediaTorrent
+type EpisodeTorrent []SceneVideoTorrent
 
 type SeriesTorrent []EpisodeTorrent
-
-type SeriesInterface interface {
-	Title() string
-}
 
 func NewTorrent(mt MetaTorrent) (T Torrent) {
 	if mt.Info.Length == 0 {
