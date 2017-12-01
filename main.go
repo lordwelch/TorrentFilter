@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -66,7 +67,7 @@ func process(torrentFile string) *SceneVideoTorrent {
 	fmt.Println("Read: ", err)
 	fmt.Printf("%+v\n", mt)
 	vt.Torrent = NewTorrent(*mt)
-	vt.Parse(vt.Name)
+	vt.Parse(strings.TrimSuffix(vt.Name, path.Ext(vt.Name)))
 	fmt.Printf("%v\n", *vt)
 	return vt
 }

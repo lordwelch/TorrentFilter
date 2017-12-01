@@ -71,7 +71,7 @@ func (Mt *MetaTorrent) ReadFile(r io.Reader) error {
 }
 
 func (Vt SceneVideoTorrent) String() string {
-	return fmt.Sprint("Original: ", Vt.Original, "\nName: ", Vt.Name, "\nEpisode: ", Vt.Season, Vt.Episode, "\nTags: ", Vt.Tags)
+	return fmt.Sprint("Original: ", Vt.Original, "\nName: ", Vt.Title, "\nEpisode: S", Vt.Season, "E", Vt.Episode, "\nTags: ", Vt.Tags)
 }
 
 func (s SeriesTorrent) Title() string {
