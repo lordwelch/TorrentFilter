@@ -70,7 +70,7 @@ func (Mt *MetaTorrent) ReadFile(r io.Reader) error {
 }
 
 func (Vt SceneVideoTorrent) String() string {
-	return fmt.Sprint("Original: ", Vt.Original, "\nName: ", Vt.Title, "\nEpisode: S", Vt.Season, "E", Vt.Episode, "\nTags: ", Vt.Tags)
+	return fmt.Sprint(Vt.Scene)
 }
 
 func (s SeriesTorrent) Title() string {
