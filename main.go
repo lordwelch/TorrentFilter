@@ -45,6 +45,8 @@ func main() {
 		err := cmd.Run()
 		if err != nil {
 			fmt.Println("url failed: ", url)
+			test, _ := cmd.CombinedOutput()
+			fmt.Println(test)
 			fmt.Println(err)
 			continue
 		}
