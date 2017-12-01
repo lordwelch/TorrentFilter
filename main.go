@@ -48,7 +48,6 @@ func main() {
 		fmt.Println()
 		if err != nil {
 			fmt.Println("url failed: ", url)
-			fmt.Println(test)
 			fmt.Println(err)
 			continue
 		}
