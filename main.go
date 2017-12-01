@@ -41,7 +41,7 @@ func main() {
 		url := strings.TrimSpace(scanner.Text())
 		torrentName = filepath.Base(url)
 		torrentPath = filepath.Join(unselectedDir, torrentName)
-		cmd := exec.Command("wget", url, "-O", torrentPath)
+		cmd := exec.Command("wget", url, "-q", "-O", torrentPath)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		err := cmd.Run()
