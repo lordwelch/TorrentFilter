@@ -42,10 +42,12 @@ func main() {
 		torrentName = filepath.Base(url)
 		torrentPath = filepath.Join(unselectedDir, torrentName)
 		cmd := exec.Command("wget", url, "-o", torrentPath)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
 		err := cmd.Run()
+		fmt.Println()
 		if err != nil {
 			fmt.Println("url failed: ", url)
-			test, _ := cmd.CombinedOutput()
 			fmt.Println(test)
 			fmt.Println(err)
 			continue
