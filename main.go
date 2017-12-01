@@ -62,7 +62,7 @@ func process(torrentFile string) *SceneVideoTorrent {
 	)
 	f, _ := os.OpenFile(torrentFile, os.O_RDONLY, 755)
 	mt.ReadFile(f)
-	//fmt.Printf("%+v\n", mt)
+	fmt.Printf("%+v\n", mt)
 	vt.Torrent = NewTorrent(*mt)
 	vt.Parse(vt.Name)
 	fmt.Printf("%v\n", *vt)
