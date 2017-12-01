@@ -41,7 +41,7 @@ func main() {
 		url := strings.TrimSpace(scanner.Text())
 		torrentName = filepath.Base(url)
 		torrentPath = filepath.Join(unselectedDir, torrentName)
-		cmd := exec.Command("wget", url, "-o", torrentPath)
+		cmd := exec.Command("wget", url, "-O", torrentPath)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		err := cmd.Run()
@@ -62,7 +62,7 @@ func process(torrentFile string) *SceneVideoTorrent {
 	)
 	f, err := os.OpenFile(torrentFile, os.O_RDONLY, 755)
 	fmt.Println("File: ",err)
-	err := mt.ReadFile(f)
+	err = mt.ReadFile(f)
 	fmt.Println("Read: "err)
 	fmt.Printf("%+v\n", mt)
 	vt.Torrent = NewTorrent(*mt)
