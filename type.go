@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io"
 
 	"github.com/lordwelch/SceneParse"
@@ -38,7 +39,10 @@ type SceneVideoTorrent struct {
 	Scene.Scene
 }
 
-type EpisodeTorrent []SceneVideoTorrent
+type EpisodeTorrent struct {
+	Episode []SceneVideoTorrent
+	Release string
+}
 
 type SeriesTorrent []EpisodeTorrent
 
@@ -66,6 +70,10 @@ func (Mt *MetaTorrent) ReadFile(r io.Reader) error {
 	return bencode.NewDecoder(r).Decode(Mt)
 }
 
+func (Vt SceneVideoTorrent) String() string {
+	return fmt.Sprint("Original: ", Vt.Original, "\nName: ", Vt.Name, "\nEpisode: ", Vt.Season, Vt.Episode, "\nTags: ", Vt.Tags)
+}
+
 func (s SeriesTorrent) Title() string {
-	return s[0][0].Title
+	return s[0].Episode[0].Title
 }
