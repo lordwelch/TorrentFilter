@@ -17,7 +17,6 @@ type MetaTorrent struct {
 	Info         struct {
 		Name         string `bencode:"name"`
 		Piece_length int64  `bencode:"piece length"`
-		Pieces       int64  `bencode:"pieces"`
 		Length       int64  `bencode:"length"`
 		Files        []struct {
 			Length int64    `bencode:"length"`
