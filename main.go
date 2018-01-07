@@ -177,7 +177,9 @@ func removeDownloads(hash []string) {
 			}
 		}
 	}
-	Transmission.RemoveTorrents(false, thash...)
+	for _, torrent := range thash {
+		torrent.Stop()
+	}
 }
 
 func initialize() {
