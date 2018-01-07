@@ -173,7 +173,7 @@ func removeDownloads(hash []string) {
 	if err != nil {
 		panic(err)
 	}
-	thash := make([]string, len(hash))
+	thash := make([]*transmission.Torrent, len(hash))
 	// Removes torrents from transmission that are not selected this time
 	for _, CHash := range hash {
 		v, ok := tmap[CHash]
