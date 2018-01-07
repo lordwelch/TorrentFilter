@@ -96,6 +96,21 @@ func download() {
 			}
 		}
 	}
+	time.Sleep(time.Second * 30)
+	tmap, _ := Transmission.GetTorrentMap()
+	for _, s := range CurrentTorrents {
+		for _, se := range s {
+			for _, ep := range se {
+				v, ok := tmap[ep.Ep[0].Meta.Hash]
+				if ok {
+					v.Set(transmission.SetTorrentArg{
+						SeedRatioMode:  1,
+						SeedRatioLimit: 1.0,
+					})
+				}
+			}
+		}
+	}
 
 }
 
@@ -216,7 +231,9 @@ func initialize() {
 	}
 
 	Transmission, err = transmission.New(transmission.Config{
-		Address: "http://timmy:9091/transmission/rpc",
+		User:     "lordwelch",
+		Password: "hello",
+		Address:  "http://timmy:9091/transmission/rpc",
 		HTTPClient: &http.Client{
 			Transport: &http.Transport{
 				TLSClientConfig: &tls.Config{
