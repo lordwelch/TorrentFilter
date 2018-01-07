@@ -11,7 +11,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"timmy.narnian.us/git/timmy/scene"
@@ -24,7 +23,6 @@ var (
 	CurrentTorrents map[string]SeriesTorrent
 	unselectedDir   string
 	Transmission    *transmission.Client
-	mutex           = new(sync.Mutex)
 
 	args struct {
 		RES      string   `arg:"help:Resolution preference [480/720/1080]"`
@@ -50,9 +48,7 @@ func main() {
 			download()
 
 		case current := <-stdC:
-			mutex.Lock()
 			addtorrent(CurrentTorrents[current.Title], current)
-			mutex.Unlock()
 		}
 	}
 }
@@ -89,9 +85,6 @@ func stdinLoop(C chan *SceneVideoTorrent) {
 }
 
 func download() {
-	mutex.Lock()
-	defer mutex.Unlock()
-
 	hash := removeLinks()
 	removeDownloads(hash)
 
@@ -173,7 +166,7 @@ func removeDownloads(hash []string) {
 	if err != nil {
 		panic(err)
 	}
-	thash := make([]*transmission.Torrent, len(hash))
+	thash := make([]*transmission.Torrent, 0, len(hash))
 	// Removes torrents from transmission that are not selected this time
 	for _, CHash := range hash {
 		v, ok := tmap[CHash]
