@@ -119,10 +119,10 @@ func (Et *EpisodeTorrent) ByExt(i, j int) bool {
 		ij int
 	)
 
-	if filepath.Ext(Et.Ep[i].Meta.Info.Name) != "mkv" {
+	if filepath.Ext(Et.Ep[i].Meta.Info.Name) != ".mkv" {
 		ii = 1
 	}
-	if filepath.Ext(Et.Ep[j].Meta.Info.Name) != "mkv" {
+	if filepath.Ext(Et.Ep[j].Meta.Info.Name) != ".mkv" {
 		ij = 1
 	}
 	return ii < ij
@@ -199,7 +199,7 @@ func (Et *EpisodeTorrent) Swap(i, j int) {
 }
 
 func (Et *EpisodeTorrent) Less(i, j int) bool {
-	return OrderedBy(Et.ByExt, Et.ByRelease, Et.ByRes, Et.ByTag)(i, j)
+	return OrderedBy(Et.ByExt, Et.ByRes, Et.ByRelease, Et.ByTag)(i, j)
 }
 
 func (Et *EpisodeTorrent) Add(Vt *SceneVideoTorrent) {
