@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"crypto/tls"
 	"fmt"
 	"net/http"
 	"os"
@@ -23,6 +22,7 @@ var (
 	CurrentTorrents map[string]SeriesTorrent
 	unselectedDir   string
 	Transmission    *transmission.Client
+	CurrentHashes   []string
 
 	args struct {
 		RES      string   `arg:"help:Resolution preference [480/720/1080]"`
@@ -32,6 +32,7 @@ var (
 		Series   []string `arg:"required,positional,help:TV series to download torrent file for"`
 		NEW      bool     `arg:"-n,help:Only modify new torrents"`
 		PATH     string   `arg:"-P,required,help:Path to torrent files"`
+		HOST     string   `arg:"-H,help:Host for transmission"`
 	}
 )
 
@@ -42,7 +43,9 @@ func main() {
 	initialize()
 	go stdinLoop(stdC)
 
-	for {
+	for i := 0; true; {
+		i++
+		fmt.Println(i)
 		select {
 		case <-time.After(time.Minute * 15):
 			download()
@@ -57,9 +60,11 @@ func stdinLoop(C chan *SceneVideoTorrent) {
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
 		url := strings.TrimSpace(scanner.Text())
+		fmt.Println("url:", url)
 		torrentName := filepath.Base(url)
 		torrentPath := filepath.Join(unselectedDir, torrentName)
 		_, err := os.Stat(torrentPath)
+		fmt.Println(err)
 		if !os.IsNotExist(err) {
 			continue
 		}
@@ -74,39 +79,71 @@ func stdinLoop(C chan *SceneVideoTorrent) {
 			fmt.Println(err)
 			continue
 		}
-		current := process(torrentPath)
-		for _, title := range args.Series {
-			if current.Title == title {
-				C <- current
-				break
+		if filepath.Ext(torrentPath) == ".torrent" {
+			current := process(torrentPath)
+			for _, title := range args.Series {
+				if current.Title == title {
+					C <- current
+					break
+				}
 			}
 		}
 	}
 }
 
+// Get hashes of torrents that were previously selected then remove the link to them
+func removeLinks() (hash []string) {
+	selectedDir := filepath.Join(unselectedDir, "../")
+	selectedFolder, _ := os.Open(selectedDir)
+	//fmt.Println("selected dir", selectedDir)
+	defer selectedFolder.Close()
+
+	selectedNames, _ := selectedFolder.Readdirnames(0)
+	for _, lnk := range selectedNames {
+		target, err := os.Readlink(filepath.Join(selectedDir, lnk))
+		//fmt.Println(target)
+		//fmt.Println(err)
+
+		if err == nil {
+			if filepath.Base(filepath.Dir(target)) == "unselected" {
+				hash = append(hash, process(target).Meta.Hash)
+
+				os.Remove(filepath.Join(selectedDir, lnk))
+			}
+		}
+	}
+	selectedNames, _ = selectedFolder.Readdirnames(0)
+	fmt.Println(selectedNames)
+	return
+}
+
 func download() {
 	hash := removeLinks()
-	removeDownloads(hash)
+	if Transmission != nil {
+		stopDownloads(hash)
+	}
 
 	for _, s := range CurrentTorrents {
 		for _, se := range s {
 			for _, ep := range se {
-				fmt.Println("symlink", ep.Ep[0].Title, ep.Ep[0].Season, ep.Ep[0].Episode)
+				fmt.Printf("Better file found for: %s S%sE%s\n", ep.Ep[0].Title, ep.Ep[0].Season, ep.Ep[0].Episode)
 				os.Symlink(ep.Ep[0].Meta.FilePath, filepath.Join(filepath.Join(ep.Ep[0].Meta.FilePath, "../../"), filepath.Base(ep.Ep[0].Meta.FilePath)))
 			}
 		}
 	}
-	time.Sleep(time.Second * 30)
-	tmap, _ := Transmission.GetTorrentMap()
-	for _, s := range CurrentTorrents {
-		for _, se := range s {
-			for _, ep := range se {
-				v, ok := tmap[ep.Ep[0].Meta.Hash]
-				if ok {
-					v.Set(transmission.SetTorrentArg{
-						SeedRatioMode:  1,
-						SeedRatioLimit: 1.0,
-					})
+	if Transmission != nil {
+		time.Sleep(time.Second * 30)
+		tmap, _ := Transmission.GetTorrentMap()
+		for _, s := range CurrentTorrents {
+			for _, se := range s {
+				for _, ep := range se {
+					v, ok := tmap[ep.Ep[0].Meta.Hash]
+					if ok {
+						v.Set(transmission.SetTorrentArg{
+							SeedRatioMode:  1,
+							SeedRatioLimit: 1.0,
+						})
+					}
 				}
 			}
 		}
@@ -150,33 +187,7 @@ func addtorrent(St SeriesTorrent, torrent *SceneVideoTorrent) {
 	St[torrent.Season][torrent.Episode].Add(torrent)
 }
 
-// Get hashes of torrents that were previously selected then remove the link to them
-func removeLinks() (hash []string) {
-	selectedDir := filepath.Join(unselectedDir, "../")
-	selectedFolder, _ := os.Open(selectedDir)
-	//fmt.Println("selected dir", selectedDir)
-	defer selectedFolder.Close()
-
-	selectedNames, _ := selectedFolder.Readdirnames(0)
-	for _, lnk := range selectedNames {
-		target, err := os.Readlink(filepath.Join(selectedDir, lnk))
-		//fmt.Println(target)
-		//fmt.Println(err)
-
-		if err == nil {
-			if filepath.Base(filepath.Dir(target)) == "unselected" {
-				hash = append(hash, process(target).Meta.Hash)
-
-				os.Remove(filepath.Join(selectedDir, lnk))
-			}
-		}
-	}
-	selectedNames, _ = selectedFolder.Readdirnames(0)
-	fmt.Println(selectedNames)
-	return
-}
-
-func removeDownloads(hash []string) {
+func stopDownloads(hash []string) {
 	tmap, err := Transmission.GetTorrentMap()
 	if err != nil {
 		panic(err)
@@ -204,6 +215,7 @@ func initialize() {
 
 	args.PATH, _ = os.Getwd()
 	args.RES = "-1"
+	args.HOST = "localhost"
 	arg.MustParse(&args)
 
 	CurrentTorrents = make(map[string]SeriesTorrent, len(args.Series))
@@ -214,36 +226,43 @@ func initialize() {
 
 	unselectedDir, _ = filepath.Abs(filepath.Join(args.PATH, "unselected/"))
 
-	//fmt.Println("unselected dir:", unselectedDir)
 	// Load all downloaded torrents
-	unselectedFolder, _ := os.Open(unselectedDir)
-	defer unselectedFolder.Close()
-	unselectedNames, _ := unselectedFolder.Readdirnames(0)
-	sort.Strings(unselectedNames)
-	for _, name := range unselectedNames {
-		current := process(filepath.Join(unselectedDir, name))
-		for _, title := range args.Series {
-			if current.Title == title {
-				addtorrent(CurrentTorrents[title], current)
-				break
+	if !args.NEW {
+		unselectedFolder, _ := os.Open(unselectedDir)
+		defer unselectedFolder.Close()
+		unselectedNames, _ := unselectedFolder.Readdirnames(0)
+		sort.Strings(unselectedNames)
+		for _, name := range unselectedNames {
+			if filepath.Ext(name) == ".torrent" {
+				current := process(filepath.Join(unselectedDir, name))
+				for _, title := range args.Series {
+					if current.Title == title {
+						addtorrent(CurrentTorrents[title], current)
+						break
+					}
+				}
 			}
 		}
 	}
 
-	Transmission, err = transmission.New(transmission.Config{
-		User:     "lordwelch",
-		Password: "hello",
-		Address:  "http://timmy:9091/transmission/rpc",
-		HTTPClient: &http.Client{
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{
-					InsecureSkipVerify: true,
-				},
-			},
-		},
-	})
+	username := "lordwelch"
+	passwd := "hello"
+	cl := &http.Client{
+		Timeout: time.Second * 10,
+	}
+	req, err := http.NewRequest("GET", "http://"+args.HOST+":9091/transmission/rpc", nil)
+	req.SetBasicAuth(username, passwd)
+	resp, err := cl.Do(req)
 	if err != nil {
-		panic(err)
+		fmt.Println(err)
+	} else {
+		resp.Body.Close()
+		Transmission, _ = transmission.New(transmission.Config{
+			User:       username,
+			Password:   passwd,
+			Address:    "http://" + args.HOST + ":9091/transmission/rpc",
+			HTTPClient: cl,
+		})
 	}
 
 	download()
@@ -261,6 +280,6 @@ func process(torrentFile string) *SceneVideoTorrent {
 	vt.Torrent = NewTorrent(*mt)
 	vt.Parse(strings.TrimSuffix(vt.Name, filepath.Ext(vt.Name)))
 	//fmt.Println(vt.Original)
-	fmt.Println(vt.Title)
+	//fmt.Println(vt.Title)
 	return vt
 }
