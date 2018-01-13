@@ -202,6 +202,20 @@ func (Et *EpisodeTorrent) Less(i, j int) bool {
 	return OrderedBy(Et.ByExt, Et.ByRes, Et.ByRelease, Et.ByTag)(i, j)
 }
 
+func (Et *EpisodeTorrent) score(i int) int {
+	var score int
+	if filepath.Ext(Et.Ep[i].Meta.FilePath) == mkv {
+		score += 10000
+	}
+	if Et.Ep[i].Resolution == Et.Res {
+		score += 9000
+	} else {
+		score += Et.Ep[i].Resolution * 1000
+	}
+	score += Et.Release[Et.Ep[i].Release] * 100
+	score += Et.Tags[Et.Ep[i].Tags]
+}
+
 func (Et *EpisodeTorrent) Add(Vt *SceneVideoTorrent) {
 	Et.Ep = append(Et.Ep, Vt)
 	sort.Stable(Et)

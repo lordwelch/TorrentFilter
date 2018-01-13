@@ -130,7 +130,10 @@ func download() {
 			for _, ep := range se {
 				var CurrentHash bool
 				for _, HASH := range hash {
-					CurrentHash = HASH == ep.Ep[0].Meta.Hash
+					if HASH == ep.Ep[0].Meta.Hash {
+						CurrentHash = HASH == ep.Ep[0].Meta.Hash
+						break
+					}
 				}
 				if !CurrentHash {
 					fmt.Printf("Better file found for: %s S%sE%s\n", ep.Ep[0].Title, ep.Ep[0].Season, ep.Ep[0].Episode)
@@ -197,7 +200,7 @@ func addtorrent(St SeriesTorrent, torrent *SceneVideoTorrent) {
 			if i+1 == 0 {
 				panic("You do not exist in a world that I know of")
 			}
-			St[torrent.Season][torrent.Episode].Release[v] = i + 1000000
+			St[torrent.Season][torrent.Episode].Release[v] = -1
 		}
 		for i, v := range args.TAGS {
 			if i+1 == 0 {
