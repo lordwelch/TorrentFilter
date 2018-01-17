@@ -54,26 +54,6 @@ type EpisodeTorrent struct {
 type SeasonTorrent map[string]*EpisodeTorrent
 type SeriesTorrent map[string]SeasonTorrent
 
-func OrderedBy(fns ...func(int, int) bool) func(int, int) bool {
-	return func(i, j int) bool {
-		// Try all but the last comparison.
-		for _, less := range fns {
-			switch {
-			case less(i, j):
-				// i < j, so we have a decision.
-				return true
-			case less(j, i):
-				// i > j, so we have a decision.
-				return false
-			}
-			// i == j; try the next comparison.
-		}
-		// All comparisons to here said "equal", so just return whatever
-		// the final comparison reports.
-		return fns[len(fns)-1](i, j)
-	}
-}
-
 func NewTorrent(mt MetaTorrent) (T Torrent) {
 	if mt.Info.Length == 0 {
 		for _, path := range mt.Info.Files {
@@ -110,83 +90,7 @@ func (Mt *MetaTorrent) ReadFile(r *os.File) error {
 }
 
 func (Vt SceneVideoTorrent) String() string {
-	return Vt.Torrent.Meta.FilePath
-}
-
-func (Et *EpisodeTorrent) ByExt(i, j int) bool {
-	var (
-		ii int
-		ij int
-	)
-
-	if filepath.Ext(Et.Ep[i].Meta.Info.Name) != ".mkv" {
-		ii = 1
-	}
-	if filepath.Ext(Et.Ep[j].Meta.Info.Name) != ".mkv" {
-		ij = 1
-	}
-	return ii < ij
-}
-
-func (Et *EpisodeTorrent) ByRelease(i, j int) bool {
-	var (
-		ii  int
-		ij  int
-		ret bool
-	)
-	ii = Et.Release[Et.Ep[i].Release]
-	ij = Et.Release[Et.Ep[j].Release]
-	if ii == 0 {
-		ii = 999999
-	}
-	if ij == 0 {
-		ij = 999999
-	}
-	if ii == ij {
-		ret = Et.Ep[i].Release > Et.Ep[j].Release
-		//fmt.Println(Et.Ep[i].Release, ">", Et.Ep[j].Release, "=", ret, Et)
-	} else {
-		ret = ii < ij
-	}
-	return ret
-}
-
-func (Et *EpisodeTorrent) ByTag(i, j int) bool {
-	var (
-		ii  int
-		ij  int
-		ret bool
-	)
-	for k := range Et.Ep[i].Tags {
-		if Et.Tags[k] > 0 {
-			ii++
-		}
-	}
-	for k := range Et.Ep[j].Tags {
-		if Et.Tags[k] > 0 {
-			ij++
-		}
-	}
-
-	if ii == ij {
-		ret = len(Et.Ep[i].Tags) < len(Et.Ep[j].Tags)
-		//fmt.Println(len(Et.Ep[i].Tags), "<", len(Et.Ep[j].Tags), "=", ret)
-	} else {
-		ret = ii > ij
-	}
-
-	return ret
-}
-
-func (Et *EpisodeTorrent) ByRes(i, j int) bool {
-	var ret bool
-	ret = Et.Ep[i].Resolution > Et.Ep[j].Resolution
-	//fmt.Println(Et.Ep[i].Resolution, ">", Et.Ep[j].Resolution, "=", ret)
-
-	if Et.Res == Et.Ep[i].Resolution && Et.Ep[i].Resolution != Et.Ep[j].Resolution {
-		ret = true
-	}
-	return ret
+	return Vt.Scene.String()
 }
 
 func (Et *EpisodeTorrent) Len() int {
@@ -199,21 +103,25 @@ func (Et *EpisodeTorrent) Swap(i, j int) {
 }
 
 func (Et *EpisodeTorrent) Less(i, j int) bool {
-	return OrderedBy(Et.ByExt, Et.ByRes, Et.ByRelease, Et.ByTag)(i, j)
+	return Et.score(i) > Et.score(j)
 }
 
 func (Et *EpisodeTorrent) score(i int) int {
 	var score int
-	if filepath.Ext(Et.Ep[i].Meta.FilePath) == mkv {
-		score += 10000
+	if filepath.Ext(Et.Ep[i].Meta.FilePath) == ".mkv" {
+		score += 1000
 	}
 	if Et.Ep[i].Resolution == Et.Res {
-		score += 9000
+		score += 900
 	} else {
-		score += Et.Ep[i].Resolution * 1000
+		score += int(Et.Ep[i].Resolution) * 100
 	}
-	score += Et.Release[Et.Ep[i].Release] * 100
-	score += Et.Tags[Et.Ep[i].Tags]
+	score += Et.Release[Et.Ep[i].Release] + 1
+	for k := range Et.Ep[i].Tags {
+		score += Et.Tags[k]
+	}
+	score += len(Et.Ep[i].Tags)
+	return score
 }
 
 func (Et *EpisodeTorrent) Add(Vt *SceneVideoTorrent) {

@@ -44,11 +44,11 @@ func main() {
 	initialize()
 	go stdinLoop(stdC)
 
-	for i := 0; true; {
-		i++
+	for i := 0; true; i++ {
 		fmt.Println(i)
 		select {
-		case <-time.After(time.Minute * 15):
+		case TIME := <-time.After(time.Minute * 15):
+			fmt.Println(TIME)
 			download()
 
 		case current := <-stdC:
@@ -96,22 +96,26 @@ func stdinLoop(C chan *SceneVideoTorrent) {
 // Get hashes of torrents that were previously selected then remove the link to them
 func getLinks() (hash []string) {
 	// get files in selected dir
-	selectedDir := filepath.Join(unselectedDir, "../")
-	selectedFolder, _ := os.Open(selectedDir)
+	selectedFolder, _ := os.Open(args.PATH)
 	defer selectedFolder.Close()
 	selectedNames, _ := selectedFolder.Readdirnames(0)
-
 	// Add hashes of currently selected torrents
 	for _, lnk := range selectedNames {
-		target, err := os.Readlink(filepath.Join(selectedDir, lnk))
+		target, err := os.Readlink(filepath.Join(args.PATH, lnk))
+
 		if err == nil {
-			if filepath.Base(filepath.Dir(target)) == "unselected" {
-				hash = append(hash, process(target).Meta.Hash)
+			if filepath.Dir(target) == unselectedDir {
+				fakeTorrent := process(target)
+				realTorrent := CurrentTorrents[fakeTorrent.Title][fakeTorrent.Season][fakeTorrent.Episode].Ep[0]
+				if realTorrent.Meta.Hash != fakeTorrent.Meta.Hash {
+					fmt.Printf("Better file found for: %s S%sE%s\n", realTorrent.Title, realTorrent.Season, realTorrent.Episode)
+					err = os.Remove(filepath.Join(args.PATH, filepath.Base(fakeTorrent.Meta.FilePath)))
+					os.Symlink(realTorrent.Meta.FilePath, filepath.Join(args.PATH, filepath.Base(realTorrent.Meta.FilePath)))
+					hash = append(hash, fakeTorrent.Meta.Hash)
+				}
 			}
 		}
 	}
-	selectedNames, _ = selectedFolder.Readdirnames(0)
-	fmt.Println(selectedNames)
 	return
 }
 
@@ -121,29 +125,15 @@ func download() {
 		err error
 	)
 	hash := getLinks()
-	if Transmission != nil {
-		stopDownloads(hash)
-	}
-
 	for _, s := range CurrentTorrents {
 		for _, se := range s {
 			for _, ep := range se {
-				var CurrentHash bool
-				for _, HASH := range hash {
-					if HASH == ep.Ep[0].Meta.Hash {
-						CurrentHash = HASH == ep.Ep[0].Meta.Hash
-						break
-					}
-				}
-				if !CurrentHash {
-					fmt.Printf("Better file found for: %s S%sE%s\n", ep.Ep[0].Title, ep.Ep[0].Season, ep.Ep[0].Episode)
-					os.Remove(filepath.Join(filepath.Join(unselectedDir, "../"), filepath.Base(ep.Ep[0].Meta.FilePath)))
-					os.Symlink(ep.Ep[0].Meta.FilePath, filepath.Join(filepath.Join(unselectedDir, "../"), filepath.Base(ep.Ep[0].Meta.FilePath)))
-				}
+				CurrentHashes = append(CurrentHashes, ep.Ep[0].Meta.Hash)
 			}
 		}
 	}
 	if Transmission != nil {
+		stopDownloads(hash)
 		time.Sleep(time.Second * 30)
 		tmap, _ := Transmission.GetTorrentMap()
 		if err != nil {
@@ -173,7 +163,6 @@ func download() {
 			}
 		}
 	}
-
 }
 
 func addtorrent(St SeriesTorrent, torrent *SceneVideoTorrent) {
@@ -200,7 +189,7 @@ func addtorrent(St SeriesTorrent, torrent *SceneVideoTorrent) {
 			if i+1 == 0 {
 				panic("You do not exist in a world that I know of")
 			}
-			St[torrent.Season][torrent.Episode].Release[v] = -1
+			St[torrent.Season][torrent.Episode].Release[v] = (i + 1) * -1
 		}
 		for i, v := range args.TAGS {
 			if i+1 == 0 {
@@ -208,6 +197,7 @@ func addtorrent(St SeriesTorrent, torrent *SceneVideoTorrent) {
 			}
 			St[torrent.Season][torrent.Episode].Tags[v] = i + 1
 		}
+		St[torrent.Season][torrent.Episode].Tags["nuked"] = -99999
 	}
 	St[torrent.Season][torrent.Episode].Add(torrent)
 }
@@ -232,20 +222,21 @@ func stopDownloads(hash []string) {
 			}
 		}
 		if run {
-			thash := make([]*transmission.Torrent, 0, len(hash))
+			// Stops torrents from transmission that are not selected this time
 			for _, CHash := range hash {
 				v, ok := tmap[CHash]
 				if ok {
-					current := scene.Parse(v.Name)
-					if CurrentTorrents[current.Title][current.Season][current.Episode].Ep[0].Meta.Hash != CHash {
-						thash = append(thash, v)
-					}
+					v.Stop()
 				}
 			}
 
-			// Removes torrents from transmission that are not selected this time
-			for _, torrent := range thash {
-				torrent.Stop()
+			for _, CHash := range CurrentHashes {
+				v, ok := tmap[CHash]
+				if ok {
+					if v.UploadRatio < 1 {
+						v.Start()
+					}
+				}
 			}
 		}
 	}
@@ -267,7 +258,8 @@ func initialize() {
 		CurrentTorrents[title] = make(SeriesTorrent, 10)
 	}
 
-	unselectedDir, _ = filepath.Abs(filepath.Join(args.PATH, "unselected/"))
+	args.PATH, _ = filepath.Abs(args.PATH)
+	unselectedDir = filepath.Join(args.PATH, "unselected/")
 
 	// Load all downloaded torrents
 	if !args.NEW {
@@ -328,6 +320,6 @@ func process(torrentFile string) *SceneVideoTorrent {
 	vt.Torrent = NewTorrent(*mt)
 	vt.Parse(strings.TrimSuffix(vt.Name, filepath.Ext(vt.Name)))
 	//fmt.Println(vt.Original)
-	//fmt.Println(vt.Title)
+	//fmt.Println(vt)
 	return vt
 }
