@@ -128,6 +128,11 @@ func download() {
 	for _, s := range CurrentTorrents {
 		for _, se := range s {
 			for _, ep := range se {
+				_, err = os.Open(filepath.Join(args.PATH, filepath.Base(ep.Ep[0].Meta.FilePath)))
+				if os.IsNotExist(err) {
+					os.Symlink(ep.Ep[0].Meta.FilePath, filepath.Join(args.PATH, filepath.Base(ep.Ep[0].Meta.FilePath)))
+					fmt.Printf("File found for: %s S%sE%s\n", ep.Ep[0].Title, ep.Ep[0].Season, ep.Ep[0].Episode)
+				}
 				CurrentHashes = append(CurrentHashes, ep.Ep[0].Meta.Hash)
 			}
 		}
