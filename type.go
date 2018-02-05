@@ -1,4 +1,4 @@
-package main
+package TorrentFilter
 
 import (
 	"crypto/sha1"
@@ -45,14 +45,15 @@ type SceneVideoTorrent struct {
 	scene.Scene
 }
 
-type EpisodeTorrent struct {
-	Ep      []*SceneVideoTorrent
-	Tags    map[string]int
-	Res     scene.Res
-	Release map[string]int
-}
-type SeasonTorrent map[string]*EpisodeTorrent
+type EpisodeTorrent []SceneVideoTorrent
+type SeasonTorrent map[string]EpisodeTorrent
 type SeriesTorrent map[string]SeasonTorrent
+
+var (
+	Tags    = make(map[string]int, 5)
+	Res     scene.Res
+	Release = make(map[string]int, 5)
+)
 
 func NewTorrent(mt MetaTorrent) (T Torrent) {
 	if mt.Info.Length == 0 {
@@ -89,55 +90,61 @@ func (Mt *MetaTorrent) ReadFile(r *os.File) error {
 	return nil
 }
 
+func (Vt SceneVideoTorrent) Score() (score int) {
+	if filepath.Ext(Vt.Name) == ".mkv" {
+		score += 1000
+	}
+	if Vt.Resolution == Res {
+		score += 900
+	} else {
+		score += int(Vt.Resolution) * 100
+	}
+	score += Release[Vt.Release] + 1
+	for k := range Vt.Tags {
+		score += Tags[k]
+	}
+	return
+}
+
 func (Vt SceneVideoTorrent) String() string {
 	return Vt.Scene.String()
 }
 
-func (Et *EpisodeTorrent) Len() int {
-	return len(Et.Ep)
+func (Et EpisodeTorrent) Len() int {
+	return len(Et)
 }
 
-func (Et *EpisodeTorrent) Swap(i, j int) {
-	Et.Ep[i], Et.Ep[j] = Et.Ep[j], Et.Ep[i]
-	//fmt.Println(Et.Ep)
+func (Et EpisodeTorrent) Swap(i, j int) {
+	Et[i], Et[j] = Et[j], Et[i]
 }
 
-func (Et *EpisodeTorrent) Less(i, j int) bool {
-	return Et.score(i) > Et.score(j)
+func (Et EpisodeTorrent) Less(i, j int) bool {
+	return Et[i].Score() > Et[j].Score()
 }
 
-func (Et *EpisodeTorrent) score(i int) int {
-	var score int
-	if filepath.Ext(Et.Ep[i].Meta.FilePath) == ".mkv" {
-		score += 1000
-	}
-	if Et.Ep[i].Resolution == Et.Res {
-		score += 900
-	} else {
-		score += int(Et.Ep[i].Resolution) * 100
-	}
-	score += Et.Release[Et.Ep[i].Release] + 1
-	for k := range Et.Ep[i].Tags {
-		score += Et.Tags[k]
-	}
-	score += len(Et.Ep[i].Tags)
-	return score
-}
-
-func (Et *EpisodeTorrent) Add(Vt *SceneVideoTorrent) {
-	Et.Ep = append(Et.Ep, Vt)
+func (Et EpisodeTorrent) Sort() {
 	sort.Stable(Et)
 }
 
 func (St SeriesTorrent) SearchHash(hash string) *SceneVideoTorrent {
 	for _, v := range St {
 		for _, v2 := range v {
-			for _, v3 := range v2.Ep {
+			for _, v3 := range v2 {
 				if v3.Meta.Hash == hash {
-					return v3
+					return &v3
 				}
 			}
 		}
 	}
-	return &SceneVideoTorrent{}
+	return nil
+}
+
+func (St SeriesTorrent) Addtorrent(torrent SceneVideoTorrent) {
+	_, ok := St[torrent.Season]
+	if !ok {
+		St[torrent.Season] = make(SeasonTorrent, 20)
+	}
+
+	St[torrent.Season][torrent.Episode] = append(St[torrent.Season][torrent.Episode], torrent)
+
 }

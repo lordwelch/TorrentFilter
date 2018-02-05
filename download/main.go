@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	tf "timmy.narnian.us/git/timmy/TorrentFilter"
 	"timmy.narnian.us/git/timmy/scene"
 
 	"github.com/alexflint/go-arg"
@@ -20,7 +21,7 @@ import (
 )
 
 var (
-	CurrentTorrents map[string]SeriesTorrent
+	CurrentTorrents map[string]*tf.SeriesTorrent
 	unselectedDir   string
 	Transmission    *transmission.Client
 	CurrentHashes   []string
@@ -39,7 +40,7 @@ var (
 
 func main() {
 	var (
-		stdC = make(chan *SceneVideoTorrent)
+		stdC = make(chan tf.SceneVideoTorrent)
 	)
 	initialize()
 	go stdinLoop(stdC)
@@ -47,17 +48,17 @@ func main() {
 	for i := 0; true; i++ {
 		fmt.Println(i)
 		select {
-		case TIME := <-time.After(time.Minute * 15):
+		case TIME := <-time.After(time.Second):
 			fmt.Println(TIME)
 			download()
 
 		case current := <-stdC:
-			addtorrent(CurrentTorrents[current.Title], current)
+			CurrentTorrents[current.Title].Addtorrent(current)
 		}
 	}
 }
 
-func stdinLoop(C chan *SceneVideoTorrent) {
+func stdinLoop(C chan tf.SceneVideoTorrent) {
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
 		url := strings.TrimSpace(scanner.Text())
@@ -69,7 +70,7 @@ func stdinLoop(C chan *SceneVideoTorrent) {
 			fmt.Println(err)
 			continue
 		}
-		cmd := exec.Command("wget", url, "-q", "-O", torrentPath)
+		cmd := exec.Command("wget", url, "-t", "5", "--waitretry=5", "-q", "-O", torrentPath)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 
@@ -99,19 +100,30 @@ func getLinks() (hash []string) {
 	selectedFolder, _ := os.Open(args.PATH)
 	defer selectedFolder.Close()
 	selectedNames, _ := selectedFolder.Readdirnames(0)
+	sort.Strings(selectedNames)
 	// Add hashes of currently selected torrents
 	for _, lnk := range selectedNames {
 		target, err := os.Readlink(filepath.Join(args.PATH, lnk))
 
 		if err == nil {
 			if filepath.Dir(target) == unselectedDir {
+				used := false
 				fakeTorrent := process(target)
-				realTorrent := CurrentTorrents[fakeTorrent.Title][fakeTorrent.Season][fakeTorrent.Episode].Ep[0]
-				if realTorrent.Meta.Hash != fakeTorrent.Meta.Hash {
-					fmt.Printf("Better file found for: %s S%sE%s\n", realTorrent.Title, realTorrent.Season, realTorrent.Episode)
-					err = os.Remove(filepath.Join(args.PATH, filepath.Base(fakeTorrent.Meta.FilePath)))
-					os.Symlink(realTorrent.Meta.FilePath, filepath.Join(args.PATH, filepath.Base(realTorrent.Meta.FilePath)))
-					hash = append(hash, fakeTorrent.Meta.Hash)
+				for _, v := range args.Series {
+					if fakeTorrent.Title == v && len((*CurrentTorrents[fakeTorrent.Title])[fakeTorrent.Season][fakeTorrent.Episode]) > 0 {
+						used = true
+						break
+					}
+				}
+
+				if used {
+					realTorrent := (*CurrentTorrents[fakeTorrent.Title])[fakeTorrent.Season][fakeTorrent.Episode][0]
+					if realTorrent.Meta.Hash != fakeTorrent.Meta.Hash {
+						fmt.Printf("Better file found for: %s S%sE%s\n", realTorrent.Title, realTorrent.Season, realTorrent.Episode)
+						err = os.Remove(filepath.Join(args.PATH, filepath.Base(fakeTorrent.Meta.FilePath)))
+						os.Symlink(realTorrent.Meta.FilePath, filepath.Join(args.PATH, filepath.Base(realTorrent.Meta.FilePath)))
+						hash = append(hash, fakeTorrent.Meta.Hash)
+					}
 				}
 			}
 		}
@@ -124,16 +136,22 @@ func download() {
 		run bool = true
 		err error
 	)
+
 	hash := getLinks()
+	CurrentHashes = make([]string, 0, len(CurrentHashes))
 	for _, s := range CurrentTorrents {
-		for _, se := range s {
+		for _, se := range *s {
 			for _, ep := range se {
-				_, err = os.Open(filepath.Join(args.PATH, filepath.Base(ep.Ep[0].Meta.FilePath)))
+				_, err = os.Open(filepath.Join(args.PATH, filepath.Base(ep[0].Meta.FilePath)))
 				if os.IsNotExist(err) {
-					os.Symlink(ep.Ep[0].Meta.FilePath, filepath.Join(args.PATH, filepath.Base(ep.Ep[0].Meta.FilePath)))
-					fmt.Printf("File found for: %s S%sE%s\n", ep.Ep[0].Title, ep.Ep[0].Season, ep.Ep[0].Episode)
+					os.Remove(filepath.Join(args.PATH, filepath.Base(ep[0].Meta.FilePath)))
+					err = os.Symlink(ep[0].Meta.FilePath, filepath.Join(args.PATH, filepath.Base(ep[0].Meta.FilePath)))
+					if err != nil {
+						fmt.Println(err)
+					}
+					fmt.Printf("File found for: %s S%sE%s\n", ep[0].Title, ep[0].Season, ep[0].Episode)
 				}
-				CurrentHashes = append(CurrentHashes, ep.Ep[0].Meta.Hash)
+				CurrentHashes = append(CurrentHashes, ep[0].Meta.Hash)
 			}
 		}
 	}
@@ -154,9 +172,9 @@ func download() {
 		}
 		if run {
 			for _, s := range CurrentTorrents {
-				for _, se := range s {
+				for _, se := range *s {
 					for _, ep := range se {
-						v, ok := tmap[ep.Ep[0].Meta.Hash]
+						v, ok := tmap[ep[0].Meta.Hash]
 						if ok {
 							v.Set(transmission.SetTorrentArg{
 								SeedRatioMode:  1,
@@ -168,43 +186,6 @@ func download() {
 			}
 		}
 	}
-}
-
-func addtorrent(St SeriesTorrent, torrent *SceneVideoTorrent) {
-	_, ok := St[torrent.Season]
-	if !ok {
-		St[torrent.Season] = make(SeasonTorrent, 20)
-	}
-	Ep := St[torrent.Season][torrent.Episode]
-	if Ep == nil {
-		RES, _ := strconv.Atoi(args.RES)
-		St[torrent.Season][torrent.Episode] = &EpisodeTorrent{
-			Tags:    make(map[string]int),
-			Release: make(map[string]int),
-			Res:     scene.Res(RES),
-		}
-
-		for i, v := range args.RELEASE {
-			if i+1 == 0 {
-				panic("You do not exist in a world that I know of")
-			}
-			St[torrent.Season][torrent.Episode].Release[v] = i + 1
-		}
-		for i, v := range args.NRELEASE {
-			if i+1 == 0 {
-				panic("You do not exist in a world that I know of")
-			}
-			St[torrent.Season][torrent.Episode].Release[v] = (i + 1) * -1
-		}
-		for i, v := range args.TAGS {
-			if i+1 == 0 {
-				panic("You do not exist in a world that I know of")
-			}
-			St[torrent.Season][torrent.Episode].Tags[v] = i + 1
-		}
-		St[torrent.Season][torrent.Episode].Tags["nuked"] = -99999
-	}
-	St[torrent.Season][torrent.Episode].Add(torrent)
 }
 
 func stopDownloads(hash []string) {
@@ -257,10 +238,33 @@ func initialize() {
 	args.HOST = "localhost"
 	arg.MustParse(&args)
 
-	CurrentTorrents = make(map[string]SeriesTorrent, len(args.Series))
+	RES, _ := strconv.Atoi(args.RES)
+	tf.Res = scene.Res(RES)
+	for i, v := range args.RELEASE {
+		if i+1 == 0 {
+			panic("You do not exist in a world that I know of")
+		}
+		tf.Release[v] = i + 1
+	}
+	for i, v := range args.NRELEASE {
+		if i+1 == 0 {
+			panic("You do not exist in a world that I know of")
+		}
+		tf.Release[v] = (i + 10) * -1
+	}
+	for i, v := range args.TAGS {
+		if i+1 == 0 {
+			panic("You do not exist in a world that I know of")
+		}
+		tf.Tags[v] = i + 1
+	}
+	tf.Tags["nuked"] = -99999
+
+	CurrentTorrents = make(map[string]*tf.SeriesTorrent, len(args.Series))
 	for _, title := range args.Series {
 		fmt.Println(title)
-		CurrentTorrents[title] = make(SeriesTorrent, 10)
+		CurrentTorrents[title] = new(tf.SeriesTorrent)
+		*CurrentTorrents[title] = make(tf.SeriesTorrent, 10)
 	}
 
 	args.PATH, _ = filepath.Abs(args.PATH)
@@ -277,7 +281,7 @@ func initialize() {
 				current := process(filepath.Join(unselectedDir, name))
 				for _, title := range args.Series {
 					if current.Title == title {
-						addtorrent(CurrentTorrents[title], current)
+						CurrentTorrents[title].Addtorrent(current)
 						break
 					}
 				}
@@ -310,21 +314,28 @@ func initialize() {
 		})
 	}
 
+	for _, s := range CurrentTorrents {
+		for _, se := range *s {
+			for _, ep := range se {
+				ep.Sort()
+			}
+		}
+	}
 	download()
 }
 
-func process(torrentFile string) *SceneVideoTorrent {
+func process(torrentFile string) tf.SceneVideoTorrent {
 	var (
-		mt = new(MetaTorrent)
-		vt = new(SceneVideoTorrent)
+		mt = new(tf.MetaTorrent)
+		vt = new(tf.SceneVideoTorrent)
 	)
 
 	f, _ := os.OpenFile(torrentFile, os.O_RDONLY, 755)
 	defer f.Close()
 	mt.ReadFile(f)
-	vt.Torrent = NewTorrent(*mt)
+	vt.Torrent = tf.NewTorrent(*mt)
 	vt.Parse(strings.TrimSuffix(vt.Name, filepath.Ext(vt.Name)))
 	//fmt.Println(vt.Original)
 	//fmt.Println(vt)
-	return vt
+	return *vt
 }
